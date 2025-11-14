@@ -1,75 +1,72 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TripController;
 use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\ReceiptController;
-use App\Http\Controllers\SettlementController;
-use App\Http\Controllers\TripReviewController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\SettlementController;
 
-// Test endpoint
-Route::get('/ping', function () {
-    return response()->json(['message' => 'pong']);
+// Test route - untuk cek API jalan
+Route::get('/test', function () {
+    return response()->json([
+        'message' => 'API is working',
+        'timestamp' => now()->toDateTimeString(),
+    ]);
 });
 
-// Routes for authentication
-Route::post('login', [AuthController::class, 'login']);
-Route::post('register', [AuthController::class, 'register']);
+// Test database connection
+Route::get('/test-db', function () {
+    try {
+        DB::connection()->getPdo();
+        return response()->json([
+            'message' => 'Database connected successfully!',
+            'database' => DB::connection()->getDatabaseName()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => 'Database connection failed',
+            'message' => $e->getMessage()
+        ], 500);
+    }
+});
 
-// Protected routes (require authentication)
+// Public routes
+Route::post('/login', [AuthController::class, 'login']);
+
+// Protected routes
 Route::middleware('auth:api')->group(function () {
-    // Auth routes
-    Route::get('me', [AuthController::class, 'me']);
-    Route::post('logout', [AuthController::class, 'logout']);
-    Route::post('refresh', [AuthController::class, 'refresh']);
-
-    // Trips - resource routes
+    Route::get('/me', [AuthController::class, 'me']); // ← HARUS ADA!
+    Route::post('/logout', [AuthController::class, 'logout']);
+    // Trip routes
     Route::apiResource('trips', TripController::class);
+    Route::post('trips/{trip}/submit', [TripController::class, 'submit']);
+    Route::post('trips/{trip}/cancel', [TripController::class, 'cancel']);
+    Route::post('trips/{trip}/extend', [TripController::class, 'extend']);
     
-    // Trips - custom routes
-    Route::post('trips/{id}/request-extension', [TripController::class, 'requestExtension']);
-    Route::post('trips/{id}/submit-review', [TripController::class, 'submitForReview']);
-    Route::post('trips/{id}/cancel', [TripController::class, 'cancel']);
-
-    // Advances - resource routes
+    // Advance routes
     Route::apiResource('advances', AdvanceController::class);
+    Route::post('advances/{advance}/approve', [AdvanceController::class, 'approve']);
+    Route::post('advances/{advance}/reject', [AdvanceController::class, 'reject']);
+    Route::post('advances/{advance}/transfer', [AdvanceController::class, 'transfer']);
     
-    // Advances - custom routes
-    Route::post('advances/{id}/approve-area', [AdvanceController::class, 'approveByArea']);
-    Route::post('advances/{id}/approve-regional', [AdvanceController::class, 'approveByRegional']);
-    Route::post('advances/{id}/mark-transferred', [AdvanceController::class, 'markAsTransferred']);
-    Route::post('advances/{id}/reject', [AdvanceController::class, 'reject']);
-
-    // Receipts - resource routes
+    // Receipt routes
     Route::apiResource('receipts', ReceiptController::class);
+    Route::post('receipts/{receipt}/verify', [ReceiptController::class, 'verify']);
     
-    // Receipts - custom routes
-    Route::post('receipts/{id}/verify', [ReceiptController::class, 'verify']);
-    Route::post('receipts/{id}/unverify', [ReceiptController::class, 'unverify']);
-    Route::get('receipts/{id}/download', [ReceiptController::class, 'download']);
-
-    // Settlements - resource routes
-    Route::apiResource('settlements', SettlementController::class);
+    // Settlement routes
+    Route::post('settlements/{trip}/submit', [SettlementController::class, 'submit']);
+    Route::post('settlements/{trip}/review', [SettlementController::class, 'review']);
+    Route::post('settlements/{trip}/approve-area', [SettlementController::class, 'approveArea']);
+    Route::post('settlements/{trip}/approve-regional', [SettlementController::class, 'approveRegional']);
+    Route::post('settlements/{trip}/complete', [SettlementController::class, 'complete']);
     
-    // Settlements - custom routes
-    Route::post('settlements/{id}/process', [SettlementController::class, 'process']);
-    Route::post('settlements/{id}/complete', [SettlementController::class, 'complete']);
-    Route::get('settlements/trip/{tripId}', [SettlementController::class, 'getByTrip']);
-
-    // Trip Reviews - custom routes (tidak pakai apiResource)
-    Route::get('trip-reviews', [TripReviewController::class, 'index']);
-    Route::get('trip-reviews/{id}', [TripReviewController::class, 'show']);
-    Route::post('trips/{tripId}/review-area', [TripReviewController::class, 'reviewByArea']);
-    Route::post('trips/{tripId}/review-regional', [TripReviewController::class, 'reviewByRegional']);
-    Route::get('trip-reviews/trip/{tripId}', [TripReviewController::class, 'getByTrip']);
-
-    // Notifications - resource routes
-    Route::apiResource('notifications', NotificationController::class)->only(['index', 'destroy']);
-    
-    // Notifications - custom routes
-    Route::post('notifications/{id}/mark-read', [NotificationController::class, 'markAsRead']);
-    Route::post('notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+    // Notification routes
+    Route::get('notifications', [NotificationController::class, 'index']);
     Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 });

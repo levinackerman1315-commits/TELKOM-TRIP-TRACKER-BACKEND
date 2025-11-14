@@ -11,18 +11,33 @@ class User extends Authenticatable implements JWTSubject
 {
     use HasFactory, Notifiable;
 
+    protected $table = 'users';
     protected $primaryKey = 'user_id';
+    public $timestamps = true;
 
     protected $fillable = [
-        'nik', 'name', 'email', 'password', 'phone', 'role',
-        'department', 'position', 'office_location', 'area_code',
-        'bank_account', 'bank_name', 'is_active'
+        'nik',
+        'name',
+        'email',
+        'password',
+        'role',
+        'phone',
+        'department',
+        'position',
+        'office_location',
+        'area',
+        'regional',
     ];
 
-    protected $hidden = ['password'];
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'email_verified_at' => 'datetime',
+        'last_login' => 'datetime',
+        'password' => 'hashed',
     ];
 
     // JWT Methods
@@ -33,13 +48,27 @@ class User extends Authenticatable implements JWTSubject
 
     public function getJWTCustomClaims()
     {
-        return [];
+        return [
+            'user_id' => $this->user_id,
+            'role' => $this->role,
+            'email' => $this->email,
+        ];
     }
 
-    // Relasi
+    // Relationships
     public function trips()
     {
         return $this->hasMany(Trip::class, 'user_id', 'user_id');
+    }
+
+    public function advances()
+    {
+        return $this->hasMany(Advance::class, 'user_id', 'user_id');
+    }
+
+    public function receipts()
+    {
+        return $this->hasMany(Receipt::class, 'user_id', 'user_id');
     }
 
     public function notifications()

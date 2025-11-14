@@ -33,18 +33,23 @@ return [
     |
     | Supported: "session"
     |
-    */
+*/
 
-    'guards' => [
-        'web' => [
-            'driver' => 'session',
-            'provider' => 'users',
-        ],
+'guards' => [
+    'web' => [
+        'driver' => 'session',
+        'provider' => 'users',
     ],
+    'api' => [
+        'driver' => 'jwt',
+        'provider' => 'users',
+        'hash' => false,
+    ],
+],
 
-    /*
-    |--------------------------------------------------------------------------
-    | User Providers
+/*
+|--------------------------------------------------------------------------
+| User Providers
     |--------------------------------------------------------------------------
     |
     | All authentication guards have a user provider, which defines how the

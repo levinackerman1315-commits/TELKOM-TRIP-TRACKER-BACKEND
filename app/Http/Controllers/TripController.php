@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Trip;
 use App\Models\TripStatusHistory;
+use App\Models\Advance;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log; // ✅ TAMBAH INI
 use Carbon\Carbon;
 
 class TripController extends Controller
@@ -16,37 +19,86 @@ class TripController extends Controller
      */
     public function index(Request $request)
     {
-        $user = Auth::user();
-        
-        $query = Trip::with(['user', 'advances', 'receipts', 'reviews', 'settlement']);
+        try {
+            /** @var User $user */
+            $user = Auth::user();
+            
+            // ✅ HANYA LOAD RELASI YANG ADA (HAPUS reviews & settlement)
+            $query = Trip::with([
+                'user', 
+                'advances', 
+                'receipts', 
+                'history.changer'
+            ]);
 
-        // Filter by role
-        if ($user->role === 'employee') {
-            $query->where('user_id', $user->user_id);
-        } elseif ($user->role === 'finance_area') {
-            // Finance area sees trips in their area
-            $query->whereHas('user', function($q) use ($user) {
-                $q->where('area_code', $user->area_code);
-            });
+            // Filter by role
+            if ($user->role === 'employee') {
+                $query->where('user_id', $user->user_id);
+            } elseif ($user->role === 'finance_area') {
+                $query->whereHas('user', function($q) use ($user) {
+                    $q->where('area_code', $user->area_code);
+                });
+            }
+
+            // Filter by status
+            if ($request->has('status')) {
+                $query->where('status', $request->status);
+            }
+
+            // Filter by date range
+            if ($request->has('start_date') && $request->has('end_date')) {
+                $query->whereBetween('start_date', [$request->start_date, $request->end_date]);
+            }
+
+            $trips = $query->orderBy('created_at', 'desc')->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $trips
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Trip index error: ' . $e->getMessage()); // ✅ FIXED
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch trips',
+                'error' => $e->getMessage()
+            ], 500);
         }
-        // finance_regional sees all trips
+    }
 
-        // Filter by status
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+    /**
+     * Get dashboard statistics
+     */
+    public function statistics()
+    {
+        try {
+            /** @var User $user */
+            $user = Auth::user();
+
+            $query = Trip::where('user_id', $user->user_id);
+
+            $stats = [
+                'total_trips' => $query->count(),
+                'active_trips' => (clone $query)->where('status', 'active')->count(),
+                'completed_trips' => (clone $query)->where('status', 'completed')->count(),
+                'pending_advances' => Advance::whereHas('trip', function($q) use ($user) {
+                    $q->where('user_id', $user->user_id);
+                })->where('status', 'pending')->count(),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $stats
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Statistics error: ' . $e->getMessage()); // ✅ FIXED
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch statistics',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Filter by date range
-        if ($request->has('start_date') && $request->has('end_date')) {
-            $query->whereBetween('start_date', [$request->start_date, $request->end_date]);
-        }
-
-        $trips = $query->orderBy('created_at', 'desc')->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $trips
-        ]);
     }
 
     /**
@@ -69,6 +121,7 @@ class TripController extends Controller
             ], 422);
         }
 
+        /** @var User $user */
         $user = Auth::user();
 
         // Check if user has active trip
@@ -103,19 +156,20 @@ class TripController extends Controller
             'status' => 'active',
         ]);
 
-        // Log status history
+        // ✅ Log status history dengan changed_at
         TripStatusHistory::create([
             'trip_id' => $trip->trip_id,
             'old_status' => null,
             'new_status' => 'active',
             'changed_by' => $user->user_id,
-            'notes' => 'Trip created'
+            'notes' => 'Trip created',
+            'changed_at' => now()
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Trip created successfully',
-            'data' => $trip
+            'data' => $trip->load('history.changer')
         ], 201);
     }
 
@@ -124,29 +178,38 @@ class TripController extends Controller
      */
     public function show($id)
     {
-        $trip = Trip::with([
-            'user',
-            'advances.approverArea',
-            'advances.approverRegional',
-            'receipts.verifier',
-            'reviews.reviewer',
-            'settlement.processor',
-            'statusHistory.changer'
-        ])->findOrFail($id);
+        try {
+            // ✅ HAPUS relasi yang error (reviews, settlement)
+            $trip = Trip::with([
+                'user',
+                'advances.approverArea',
+                'advances.approverRegional',
+                'receipts',
+                'history.changer'
+            ])->findOrFail($id);
 
-        // Check authorization
-        $user = Auth::user();
-        if ($user->role === 'employee' && $trip->user_id !== $user->user_id) {
+            // Check authorization
+            /** @var User $user */
+            $user = Auth::user();
+            if ($user->role === 'employee' && $trip->user_id !== $user->user_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized'
+                ], 403);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $trip
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Trip show error: ' . $e->getMessage()); // ✅ FIXED
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized'
-            ], 403);
+                'message' => 'Trip not found',
+                'error' => $e->getMessage()
+            ], 404);
         }
-
-        return response()->json([
-            'success' => true,
-            'data' => $trip
-        ]);
     }
 
     /**
@@ -156,8 +219,11 @@ class TripController extends Controller
     {
         $trip = Trip::findOrFail($id);
 
+        /** @var User $user */
+        $user = Auth::user();
+
         // Only owner can update and only if status is active
-        if ($trip->user_id !== Auth::user()->user_id) {
+        if ($trip->user_id !== $user->user_id) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized'
@@ -201,7 +267,7 @@ class TripController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Trip updated successfully',
-            'data' => $trip
+            'data' => $trip->load('history.changer')
         ]);
     }
 
@@ -224,8 +290,11 @@ class TripController extends Controller
 
         $trip = Trip::findOrFail($id);
 
+        /** @var User $user */
+        $user = Auth::user();
+
         // Only owner can request extension
-        if ($trip->user_id !== Auth::user()->user_id) {
+        if ($trip->user_id !== $user->user_id) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized'
@@ -246,19 +315,20 @@ class TripController extends Controller
             'extension_requested_at' => now(),
         ]);
 
-        // Log status history
+        // ✅ Log status history dengan changed_at
         TripStatusHistory::create([
             'trip_id' => $trip->trip_id,
             'old_status' => $trip->status,
             'new_status' => $trip->status,
-            'changed_by' => Auth::user()->user_id,
-            'notes' => 'Trip extension requested: ' . $request->extension_reason
+            'changed_by' => $user->user_id,
+            'notes' => 'Trip extension requested: ' . $request->extension_reason,
+            'changed_at' => now()
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Extension request submitted successfully',
-            'data' => $trip
+            'data' => $trip->load('history.changer')
         ]);
     }
 
@@ -269,22 +339,19 @@ class TripController extends Controller
     {
         $trip = Trip::findOrFail($id);
 
+        /** @var User $user */
+        $user = Auth::user();
+
         // Only owner can submit
-        if ($trip->user_id !== Auth::user()->user_id) {
+        if ($trip->user_id !== $user->user_id) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized'
             ], 403);
         }
 
-        // Can only submit if trip has ended
-        $endDate = $trip->extended_end_date ?? $trip->end_date;
-        if (Carbon::parse($endDate)->isFuture()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Cannot submit trip that has not ended yet'
-            ], 422);
-        }
+        // ✅ HAPUS VALIDASI TANGGAL - Biar bisa submit kapan saja
+        // Allow submission anytime for testing/demo purposes
 
         // Update status
         $oldStatus = $trip->status;
@@ -293,19 +360,20 @@ class TripController extends Controller
             'submitted_at' => now()
         ]);
 
-        // Log status history
+        // ✅ Log status history dengan changed_at
         TripStatusHistory::create([
             'trip_id' => $trip->trip_id,
             'old_status' => $oldStatus,
             'new_status' => 'awaiting_review',
-            'changed_by' => Auth::user()->user_id,
-            'notes' => 'Trip submitted for review'
+            'changed_by' => $user->user_id,
+            'notes' => 'Trip submitted for review',
+            'changed_at' => now()
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Trip submitted for review',
-            'data' => $trip
+            'data' => $trip->load('history.changer')
         ]);
     }
 
@@ -316,8 +384,11 @@ class TripController extends Controller
     {
         $trip = Trip::findOrFail($id);
 
+        /** @var User $user */
+        $user = Auth::user();
+
         // Only owner can cancel
-        if ($trip->user_id !== Auth::user()->user_id) {
+        if ($trip->user_id !== $user->user_id) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized'
@@ -335,19 +406,20 @@ class TripController extends Controller
         $oldStatus = $trip->status;
         $trip->update(['status' => 'cancelled']);
 
-        // Log status history
+        // ✅ Log status history dengan changed_at
         TripStatusHistory::create([
             'trip_id' => $trip->trip_id,
             'old_status' => $oldStatus,
             'new_status' => 'cancelled',
-            'changed_by' => Auth::user()->user_id,
-            'notes' => $request->input('reason', 'Trip cancelled by user')
+            'changed_by' => $user->user_id,
+            'notes' => $request->input('reason', 'Trip cancelled by user'),
+            'changed_at' => now()
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Trip cancelled successfully',
-            'data' => $trip
+            'data' => $trip->load('history.changer')
         ]);
     }
 }

@@ -11,10 +11,15 @@ class TripStatusHistory extends Model
 
     protected $table = 'trip_status_history';
     protected $primaryKey = 'history_id';
-    public $timestamps = false;
+    public $timestamps = false; // ✅ Penting karena pakai changed_at manual
 
     protected $fillable = [
-        'trip_id', 'old_status', 'new_status', 'changed_by', 'notes', 'changed_at'
+        'trip_id', 
+        'old_status', 
+        'new_status', 
+        'changed_by', 
+        'notes', 
+        'changed_at'
     ];
 
     protected $casts = [

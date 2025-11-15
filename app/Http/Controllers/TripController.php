@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use App\Models\Trip;
@@ -9,7 +8,8 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log; // ✅ TAMBAH INI
+use Illuminate\Support\Facades\Log; // ✅ Ensure this is present
+use Illuminate\Support\Facades\DB;  // ✅ Add this line
 use Carbon\Carbon;
 
 class TripController extends Controller
@@ -377,49 +377,95 @@ class TripController extends Controller
         ]);
     }
 
-    /**
-     * Cancel trip
-     */
     public function cancel(Request $request, $id)
     {
-        $trip = Trip::findOrFail($id);
+        try {
+            $trip = Trip::findOrFail($id);
 
-        /** @var User $user */
-        $user = Auth::user();
+            /** @var User $user */
+            $user = Auth::user();
 
-        // Only owner can cancel
-        if ($trip->user_id !== $user->user_id) {
+            // Check authorization
+            if ($user->role === 'employee' && $trip->user_id !== $user->user_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized'
+                ], 403);
+            }
+
+            // Check if trip can be cancelled
+            if (!in_array($trip->status, ['active', 'awaiting_review'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Can only cancel active or awaiting review trip'
+                ], 422);
+            }
+
+            // Start transaction
+            DB::beginTransaction();
+
+            try {
+                // ✅ DELETE pending advances
+                $deletedCount = Advance::where('trip_id', $trip->trip_id)
+                                       ->where('status', 'pending')
+                                       ->delete();
+
+                // ✅ VOID approved advances (that haven't been transferred)
+                $voidedCount = Advance::where('trip_id', $trip->trip_id)
+                                      ->whereIn('status', ['approved_area', 'approved_regional'])
+                                      ->update(['status' => 'voided']);
+
+                // Update trip status
+                $oldStatus = $trip->status;
+                $trip->status = 'cancelled';
+                $trip->save();
+
+                // Log status history
+                TripStatusHistory::create([
+                    'trip_id' => $trip->trip_id,
+                    'old_status' => $oldStatus,
+                    'new_status' => 'cancelled',
+                    'changed_by' => $user->user_id,
+                    'notes' => sprintf(
+                        'Trip cancelled. Deleted %d pending advance(s), voided %d approved advance(s)',
+                        $deletedCount,
+                        $voidedCount
+                    ),
+                    'changed_at' => now()
+                ]);
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Trip cancelled successfully',
+                    'data' => [
+                        'trip' => $trip->load('history.changer'),
+                        'deleted_advances' => $deletedCount,
+                        'voided_advances' => $voidedCount
+                    ]
+                ]);
+
+            } catch (\Exception $e) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to cancel trip: ' . $e->getMessage()
+                ], 500);
+            }
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Unauthorized'
-            ], 403);
-        }
+                'message' => 'Trip not found'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('Cancel trip error: ' . $e->getMessage());
 
-        // Can only cancel active trip
-        if ($trip->status !== 'active') {
             return response()->json([
                 'success' => false,
-                'message' => 'Can only cancel active trip'
-            ], 422);
+                'message' => 'Failed to cancel trip: ' . $e->getMessage()
+            ], 500);
         }
-
-        $oldStatus = $trip->status;
-        $trip->update(['status' => 'cancelled']);
-
-        // ✅ Log status history dengan changed_at
-        TripStatusHistory::create([
-            'trip_id' => $trip->trip_id,
-            'old_status' => $oldStatus,
-            'new_status' => 'cancelled',
-            'changed_by' => $user->user_id,
-            'notes' => $request->input('reason', 'Trip cancelled by user'),
-            'changed_at' => now()
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Trip cancelled successfully',
-            'data' => $trip->load('history.changer')
-        ]);
     }
 }

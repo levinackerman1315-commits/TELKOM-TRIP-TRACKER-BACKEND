@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Auth;
 class AdvanceController extends Controller
 {
     /**
-     * Get all advances
+     * Get all advances (with optional filters)
      */
     public function index(Request $request)
     {
@@ -22,6 +22,11 @@ class AdvanceController extends Controller
         $user = Auth::user();
         
         $query = Advance::with(['trip.user', 'approverArea', 'approverRegional']);
+
+        // ✅ FIX: Filter by trip_id if provided
+        if ($request->has('trip_id')) {
+            $query->where('trip_id', $request->trip_id);
+        }
 
         // Filter by role
         if ($user->role === 'employee') {
@@ -47,6 +52,36 @@ class AdvanceController extends Controller
         ]);
     }
 
+    /**
+     * ✅ NEW METHOD: Get advances by specific trip
+     */
+  public function getByTrip(Request $request, $tripId)
+{
+    /** @var User $user */
+    $user = Auth::user();
+    
+    // Verify trip exists
+    $trip = Trip::findOrFail($tripId);
+
+    // Check authorization
+    if ($user->role === 'employee' && $trip->user_id !== $user->user_id) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized'
+        ], 403);
+    }
+
+    // ✅ CRITICAL: Filter by trip_id ONLY
+    $advances = Advance::with(['trip.user', 'approverArea', 'approverRegional'])
+                       ->where('trip_id', $tripId) // ← INI YANG PENTING!
+                       ->orderBy('requested_at', 'desc')
+                       ->get();
+
+    return response()->json([
+        'success' => true,
+        'data' => $advances
+    ]);
+}
     /**
      * Create advance request
      */
@@ -90,6 +125,7 @@ class AdvanceController extends Controller
         if ($request->request_type === 'initial') {
             $existingInitial = Advance::where('trip_id', $trip->trip_id)
                 ->where('request_type', 'initial')
+                ->whereNotIn('status', ['rejected']) // ✅ Exclude rejected ones
                 ->first();
 
             if ($existingInitial) {
@@ -114,8 +150,6 @@ class AdvanceController extends Controller
         ]);
 
         // Log status history
-        /** @var User $currentUser */
-        $currentUser = Auth::user();
         AdvanceStatusHistory::create([
             'advance_id' => $advance->advance_id,
             'old_status' => null,
@@ -123,9 +157,6 @@ class AdvanceController extends Controller
             'changed_by' => $currentUser->user_id,
             'notes' => 'Advance request created'
         ]);
-
-        // Create notification for finance area
-        // TODO: Implement notification
 
         return response()->json([
             'success' => true,
@@ -145,6 +176,7 @@ class AdvanceController extends Controller
             'approverRegional',
             'statusHistory.changer'
         ])->findOrFail($id);
+        
         return response()->json([
             'success' => true,
             'data' => $advance
@@ -180,7 +212,6 @@ class AdvanceController extends Controller
 
         $advance = Advance::findOrFail($id);
 
-        // Check if status is pending
         if ($advance->status !== 'pending') {
             return response()->json([
                 'success' => false,
@@ -197,7 +228,6 @@ class AdvanceController extends Controller
             'notes' => $request->notes,
         ]);
 
-        // Log status history
         AdvanceStatusHistory::create([
             'advance_id' => $advance->advance_id,
             'old_status' => $oldStatus,
@@ -205,6 +235,7 @@ class AdvanceController extends Controller
             'changed_by' => $user->user_id,
             'notes' => 'Approved by Finance Area: ' . $request->notes
         ]);
+        
         return response()->json([
             'success' => true,
             'message' => 'Advance approved by Finance Area',
@@ -240,7 +271,6 @@ class AdvanceController extends Controller
 
         $advance = Advance::findOrFail($id);
 
-        // Check if status is approved_area
         if ($advance->status !== 'approved_area') {
             return response()->json([
                 'success' => false,
@@ -256,7 +286,6 @@ class AdvanceController extends Controller
             'notes' => $request->notes,
         ]);
 
-        // Log status history
         AdvanceStatusHistory::create([
             'advance_id' => $advance->advance_id,
             'old_status' => $oldStatus,
@@ -264,6 +293,7 @@ class AdvanceController extends Controller
             'changed_by' => $user->user_id,
             'notes' => 'Approved by Finance Regional: ' . $request->notes
         ]);
+        
         return response()->json([
             'success' => true,
             'message' => 'Advance approved by Finance Regional',
@@ -319,7 +349,6 @@ class AdvanceController extends Controller
         $trip->total_advance += $advance->approved_amount;
         $trip->save();
 
-        // Log status history
         AdvanceStatusHistory::create([
             'advance_id' => $advance->advance_id,
             'old_status' => $oldStatus,
@@ -334,6 +363,7 @@ class AdvanceController extends Controller
             'data' => $advance
         ]);
     }
+
     /**
      * Reject advance
      */
@@ -368,7 +398,6 @@ class AdvanceController extends Controller
             'rejection_reason' => $request->rejection_reason,
         ]);
 
-        // Log status history
         AdvanceStatusHistory::create([
             'advance_id' => $advance->advance_id,
             'old_status' => $oldStatus,
@@ -381,6 +410,41 @@ class AdvanceController extends Controller
             'success' => true,
             'message' => 'Advance rejected',
             'data' => $advance
+        ]);
+    }
+
+    /**
+     * ✅ NEW: Delete/void advance (for cancelled trips)
+     */
+    public function destroy($id)
+    {
+        /** @var User $user */
+        $user = Auth::user();
+        
+        $advance = Advance::findOrFail($id);
+        
+        // Only employee can delete their own pending advance
+        if ($user->role === 'employee') {
+            if ($advance->trip->user_id !== $user->user_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized'
+                ], 403);
+            }
+            
+            if ($advance->status !== 'pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Can only delete pending advances'
+                ], 422);
+            }
+        }
+        
+        $advance->delete();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Advance deleted successfully'
         ]);
     }
 }

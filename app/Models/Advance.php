@@ -10,7 +10,9 @@ class Advance extends Model
     use HasFactory;
 
     protected $primaryKey = 'advance_id';
-    public $timestamps = false;
+    
+    // ✅ FIX: Enable timestamps
+    public $timestamps = true; // ← UBAH DARI false JADI true!
 
     protected $fillable = [
         'trip_id', 'advance_number', 'request_type', 'requested_amount',
@@ -27,8 +29,12 @@ class Advance extends Model
         'requested_at' => 'datetime',
         'approved_at_area' => 'datetime',
         'approved_at_regional' => 'datetime',
+        // ✅ TAMBAH INI untuk fix "Invalid Date"
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 
+    // Relationships
     public function trip()
     {
         return $this->belongsTo(Trip::class, 'trip_id', 'trip_id');

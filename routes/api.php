@@ -75,15 +75,22 @@ Route::middleware('auth:api')->group(function () {
     
     Route::prefix('trips')->group(function () {
         // CRUD operations
+        Route::get('statistics', [TripController::class, 'statistics']);
         Route::get('/', [TripController::class, 'index']);
         Route::post('/', [TripController::class, 'store']);
         Route::get('/{id}', [TripController::class, 'show']);
         Route::put('/{id}', [TripController::class, 'update']);
         
+
+        // ✅ INI HARUS ADA - SEBELUM {id}
+    Route::get('{id}/advances', [AdvanceController::class, 'getByTrip']);
         // Trip actions
         Route::post('/{id}/submit', [TripController::class, 'submitForReview']);
         Route::post('/{id}/cancel', [TripController::class, 'cancel']);
         Route::post('/{id}/extension', [TripController::class, 'requestExtension']);
+        
+        // ✅ NEW: Get advances by trip
+        Route::get('/{id}/advances', [AdvanceController::class, 'getByTrip']);
     });
     
     // --------------------------------------------
@@ -147,6 +154,7 @@ Route::fallback(function () {
             'GET /api/me' => 'Get current user',
             'GET /api/trips' => 'Get all trips',
             'GET /api/trips/statistics' => 'Get trip statistics',
+            'GET /api/trips/{id}/advances' => '✅ Get advances for specific trip',
         ]
     ], 404);
 });

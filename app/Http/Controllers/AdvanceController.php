@@ -16,41 +16,86 @@ class AdvanceController extends Controller
     /**
      * Get all advances (with optional filters)
      */
-    public function index(Request $request)
-    {
-        /** @var User $user */
-        $user = Auth::user();
-        
-        $query = Advance::with(['trip.user', 'approverArea', 'approverRegional']);
+    /**
+ * Get all advances (with optional filters)
+ * FIXED: Add computed properties for frontend
+ */
+public function index(Request $request)
+{
+    /** @var User $user */
+    $user = Auth::user();
+    
+    $query = Advance::with(['trip.user', 'approverArea', 'approverRegional']);
 
-        // ✅ FIX: Filter by trip_id if provided
-        if ($request->has('trip_id')) {
-            $query->where('trip_id', $request->trip_id);
-        }
-
-        // Filter by role
-        if ($user->role === 'employee') {
-            $query->whereHas('trip', function($q) use ($user) {
-                $q->where('user_id', $user->user_id);
-            });
-        } elseif ($user->role === 'finance_area') {
-            $query->whereHas('trip.user', function($q) use ($user) {
-                $q->where('area_code', $user->area_code);
-            });
-        }
-
-        // Filter by status
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
-        }
-
-        $advances = $query->orderBy('requested_at', 'desc')->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => $advances
-        ]);
+    // Filter by trip_id if provided
+    if ($request->has('trip_id')) {
+        $query->where('trip_id', $request->trip_id);
     }
+
+    // Filter by role
+    if ($user->role === 'employee') {
+        $query->whereHas('trip', function($q) use ($user) {
+            $q->where('user_id', $user->user_id)
+              ->where('status', '!=', 'cancelled'); // ✅ Exclude cancelled trips
+        });
+    } elseif ($user->role === 'finance_area') {
+        $query->whereHas('trip.user', function($q) use ($user) {
+            $q->where('area_code', $user->area_code);
+        })->whereHas('trip', function($q) {
+            $q->where('status', '!=', 'cancelled'); // ✅ Exclude cancelled trips
+        });
+    }
+
+    // Filter by status
+    if ($request->has('status')) {
+        $query->where('status', $request->status);
+    }
+
+    $advances = $query->orderBy('requested_at', 'desc')->get();
+
+    // ✅ FIX: Transform data untuk frontend
+    $transformedAdvances = $advances->map(function($advance) {
+        return [
+            // ✅ Primary fields
+            'id' => $advance->advance_id,
+            'advance_id' => $advance->advance_id,
+            'advance_number' => $advance->advance_number,
+            'trip_id' => $advance->trip_id,
+            'request_type' => $advance->request_type,
+            'requested_amount' => $advance->requested_amount,
+            'approved_amount' => $advance->approved_amount,
+            'status' => $advance->status,
+            'request_reason' => $advance->request_reason,
+            'rejection_reason' => $advance->rejection_reason,
+            'notes' => $advance->notes,
+            
+            // ✅ Timestamps
+            'requested_at' => $advance->requested_at,
+            'approved_at_area' => $advance->approved_at_area,
+            'approved_at_regional' => $advance->approved_at_regional,
+            'transfer_date' => $advance->transfer_date,
+            'transfer_reference' => $advance->transfer_reference,
+            'created_at' => $advance->created_at,
+            'updated_at' => $advance->updated_at,
+            
+            // ✅ Computed fields untuk frontend
+            'trip_number' => $advance->trip ? $advance->trip->trip_number : null,
+            'destination' => $advance->trip ? $advance->trip->destination : null,
+            'employee_id' => $advance->trip && $advance->trip->user ? $advance->trip->user->user_id : null,
+            'employee_name' => $advance->trip && $advance->trip->user ? $advance->trip->user->name : null,
+            
+            // ✅ Relasi (jika diperlukan)
+            'trip' => $advance->trip,
+            'approver_area' => $advance->approverArea,
+            'approver_regional' => $advance->approverRegional,
+        ];
+    });
+
+    return response()->json([
+        'success' => true,
+        'data' => $transformedAdvances
+    ]);
+}
 
     /**
      * ✅ NEW METHOD: Get advances by specific trip

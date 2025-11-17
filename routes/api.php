@@ -82,6 +82,14 @@ Route::middleware('auth:api')->group(function () {
         Route::put('/{id}', [TripController::class, 'update']);
         
 
+          // ✅ Finance Area - Settlement
+    Route::post('{id}/approve-settlement', [TripController::class, 'approveSettlement']);
+    Route::post('{id}/reject-settlement', [TripController::class, 'rejectSettlement']);
+
+      // ✅ Finance Regional - Final Approval
+    Route::post('{id}/approve-settlement-regional', [TripController::class, 'approveSettlementRegional']);
+
+
         // ✅ INI HARUS ADA - SEBELUM {id}
     Route::get('{id}/advances', [AdvanceController::class, 'getByTrip']);
         // Trip actions
@@ -89,8 +97,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/{id}/cancel', [TripController::class, 'cancel']);
         Route::post('/{id}/extension', [TripController::class, 'requestExtension']);
         
-        // ✅ NEW: Get advances by trip
-        Route::get('/{id}/advances', [AdvanceController::class, 'getByTrip']);
+        // ✅ NEW: Get advances by trip);
     });
     
     // --------------------------------------------
@@ -116,13 +123,17 @@ Route::middleware('auth:api')->group(function () {
     Route::prefix('receipts')->group(function () {
         // CRUD operations
         Route::get('/', [ReceiptController::class, 'index']);
-        Route::post('/', [ReceiptController::class, 'upload']);
+        Route::post('/', [ReceiptController::class, 'store']); 
         Route::get('/{id}', [ReceiptController::class, 'show']);
         Route::post('/{id}', [ReceiptController::class, 'update']);
         Route::delete('/{id}', [ReceiptController::class, 'delete']);
         
+
+         // ✅ Finance Area - Verify/Unverify
+
+
         // Receipt actions (Finance)
-        Route::post('/{id}/verify', [ReceiptController::class, 'verify']);
+        Route::post('/{id}/verify', [ReceiptController::class, 'verify']);//
         Route::post('/{id}/unverify', [ReceiptController::class, 'unverify']);
         Route::get('/{id}/download', [ReceiptController::class, 'download']);
     });
@@ -151,6 +162,7 @@ Route::fallback(function () {
             'GET /api/test' => 'Test API connection',
             'GET /api/test-db' => 'Test database connection',
             'POST /api/login' => 'Login user',
+            'POST /api/receipts' => '✅ Upload receipt (FIXED)',
             'GET /api/me' => 'Get current user',
             'GET /api/trips' => 'Get all trips',
             'GET /api/trips/statistics' => 'Get trip statistics',

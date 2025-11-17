@@ -62,7 +62,7 @@ class ReceiptController extends Controller
             'advance_id' => 'nullable|exists:advances,advance_id',
             'receipt_date' => 'required|date',
             'amount' => 'required|numeric|min:0',
-            'category' => 'required|in:fuel,meal,accommodation,transportation,parking,toll,other',
+               'category' => 'required|in:transportation,accommodation,meals,communication,entertainment,supplies,other', // ✅ UPDATE INI
             'merchant_name' => 'nullable|string|max:100',
             'description' => 'required|string|max:255',
             'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120', // Max 5MB
@@ -259,95 +259,60 @@ class ReceiptController extends Controller
     /**
      * Verify receipt (Finance only)
      */
-    public function verify(Request $request, $id)
-    {
-        /** @var User $user */
-        $user = Auth::user();
-
-        if (!in_array($user->role, ['finance_area', 'finance_regional'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only Finance can verify receipts'
-            ], 403);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'verification_notes' => 'nullable|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
+   public function verify(Request $request, $id)
+{
+    try {
         $receipt = Receipt::findOrFail($id);
-
-        if ($receipt->is_verified) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Receipt already verified'
-            ], 422);
-        }
-
-        $receipt->update([
-            'is_verified' => true,
-            'verified_by' => $user->user_id,
-            'verification_notes' => $request->verification_notes,
-        ]);
-
+        
+        $receipt->is_verified = true;
+        $receipt->verified_by = Auth::id();
+        $receipt->verified_at = now();
+        $receipt->verification_notes = $request->notes;
+        $receipt->save();
+        
         return response()->json([
             'success' => true,
             'message' => 'Receipt verified successfully',
             'data' => $receipt
         ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to verify receipt: ' . $e->getMessage()
+        ], 500);
     }
+}
     /**
      * Unverify receipt (Finance only)
      */
-    public function unverify(Request $request, $id)
-    {
-        /** @var User $user */
-        $user = Auth::user();
-
-        if (!in_array($user->role, ['finance_area', 'finance_regional'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Only Finance can unverify receipts'
-            ], 403);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'verification_notes' => 'required|string',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
+   public function unverify(Request $request, $id)
+{
+    try {
         $receipt = Receipt::findOrFail($id);
-
-        $receipt->update([
-            'is_verified' => false,
-            'verified_by' => null,
-            'verified_at' => null,
-            'verification_notes' => $request->verification_notes,
-        ]);
-
+        
+        $receipt->is_verified = false;
+        $receipt->verified_by = null;
+        $receipt->verified_at = null;
+        $receipt->verification_notes = $request->notes;
+        $receipt->save();
+        
         return response()->json([
             'success' => true,
             'message' => 'Receipt unverified',
             'data' => $receipt
         ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to unverify receipt: ' . $e->getMessage()
+        ], 500);
     }
-
+}
     /**
      * Download receipt file
-     */
+     */ 
     public function download($id)
     {
         $receipt = Receipt::findOrFail($id);

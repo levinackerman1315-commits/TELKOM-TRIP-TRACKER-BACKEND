@@ -377,95 +377,241 @@ class TripController extends Controller
         ]);
     }
 
-    public function cancel(Request $request, $id)
-    {
-        try {
-            $trip = Trip::findOrFail($id);
+    // ═══════════════════════════════════════════════════════════
+// SETTLEMENT - Finance Area
+// ═══════════════════════════════════════════════════════════
 
-            /** @var User $user */
-            $user = Auth::user();
-
-            // Check authorization
-            if ($user->role === 'employee' && $trip->user_id !== $user->user_id) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Unauthorized'
-                ], 403);
-            }
-
-            // Check if trip can be cancelled
-            if (!in_array($trip->status, ['active', 'awaiting_review'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Can only cancel active or awaiting review trip'
-                ], 422);
-            }
-
-            // Start transaction
-            DB::beginTransaction();
-
-            try {
-                // ✅ DELETE pending advances
-                $deletedCount = Advance::where('trip_id', $trip->trip_id)
-                                       ->where('status', 'pending')
-                                       ->delete();
-
-                // ✅ VOID approved advances (that haven't been transferred)
-                $voidedCount = Advance::where('trip_id', $trip->trip_id)
-                                      ->whereIn('status', ['approved_area', 'approved_regional'])
-                                      ->update(['status' => 'voided']);
-
-                // Update trip status
-                $oldStatus = $trip->status;
-                $trip->status = 'cancelled';
-                $trip->save();
-
-                // Log status history
-                TripStatusHistory::create([
-                    'trip_id' => $trip->trip_id,
-                    'old_status' => $oldStatus,
-                    'new_status' => 'cancelled',
-                    'changed_by' => $user->user_id,
-                    'notes' => sprintf(
-                        'Trip cancelled. Deleted %d pending advance(s), voided %d approved advance(s)',
-                        $deletedCount,
-                        $voidedCount
-                    ),
-                    'changed_at' => now()
-                ]);
-
-                DB::commit();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Trip cancelled successfully',
-                    'data' => [
-                        'trip' => $trip->load('history.changer'),
-                        'deleted_advances' => $deletedCount,
-                        'voided_advances' => $voidedCount
-                    ]
-                ]);
-
-            } catch (\Exception $e) {
-                DB::rollBack();
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to cancel trip: ' . $e->getMessage()
-                ], 500);
-            }
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+public function approveSettlement(Request $request, $id)
+{
+    DB::beginTransaction();
+    try {
+        $trip = Trip::findOrFail($id);
+        
+        // ✅ Cek status
+        if ($trip->status !== 'awaiting_review') {
             return response()->json([
                 'success' => false,
-                'message' => 'Trip not found'
-            ], 404);
+                'message' => 'Trip is not awaiting review'
+            ], 422);
+        }
+        
+        // ✅ Update status
+        $trip->status = 'under_review_regional';
+        $trip->save();
+        
+        // ✅ Log history
+        TripStatusHistory::create([
+            'trip_id' => $trip->trip_id,
+            'old_status' => 'awaiting_review',
+            'new_status' => 'under_review_regional',
+            'changed_by' => Auth::id(),
+            'notes' => $request->notes ?? 'Approved by Finance Area'
+        ]);
+        
+        DB::commit();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Settlement approved and forwarded to Finance Regional',
+            'data' => $trip
+        ]);
+        
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to approve settlement: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+
+public function rejectSettlement(Request $request, $id)
+{
+    $request->validate([
+        'rejection_reason' => 'required|string'
+    ]);
+    
+    DB::beginTransaction();
+    try {
+        $trip = Trip::findOrFail($id);
+        
+        // ✅ Kembali ke active
+        $trip->status = 'active';
+        $trip->rejection_reason = $request->rejection_reason;
+        $trip->save();
+        
+        // ✅ Log history
+        TripStatusHistory::create([
+            'trip_id' => $trip->trip_id,
+            'old_status' => 'awaiting_review',
+            'new_status' => 'active',
+            'changed_by' => Auth::id(),
+            'notes' => $request->rejection_reason
+        ]);
+        
+        DB::commit();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Settlement rejected and returned to employee',
+            'data' => $trip
+        ]);
+        
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to reject settlement: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+
+//═══════════════════════════════════════════════════════════
+// SETTLEMENT - Finance Regional
+// ═══════════════════════════════════════════════════════════
+
+public function approveSettlementRegional(Request $request, $id)
+{
+    DB::beginTransaction();
+    try {
+        $trip = Trip::findOrFail($id);
+        
+        if ($trip->status !== 'under_review_regional') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Trip is not under regional review'
+            ], 422);
+        }
+        
+        $trip->status = 'completed';
+        $trip->save();
+        
+        TripStatusHistory::create([
+            'trip_id' => $trip->trip_id,
+            'old_status' => 'under_review_regional',
+            'new_status' => 'completed',
+            'changed_by' => Auth::id(),
+            'notes' => $request->notes ?? 'Approved by Finance Regional'
+        ]);
+        
+        DB::commit();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Settlement completed',
+            'data' => $trip
+        ]);
+        
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to complete settlement: ' . $e->getMessage()
+        ], 500);
+    }
+}
+
+
+    public function cancel(Request $request, $id)
+{
+    try {
+        $trip = Trip::findOrFail($id);
+
+        /** @var User $user */
+        $user = Auth::user();
+
+        // Check authorization
+        if ($user->role === 'employee' && $trip->user_id !== $user->user_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized'
+            ], 403);
+        }
+
+        // Check if trip can be cancelled
+        if (!in_array($trip->status, ['active', 'awaiting_review'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Can only cancel active or awaiting review trip'
+            ], 422);
+        }
+
+        // Start transaction
+        DB::beginTransaction();
+
+        try {
+            // ✅ DELETE pending advances
+            $deletedCount = Advance::where('trip_id', $trip->trip_id)
+                                   ->where('status', 'pending')
+                                   ->delete();
+
+            // ✅ VOID approved advances (that haven't been transferred)
+            // ✅ FIX: Pastikan 'voided' ada di ENUM sebelum update
+            $voidedCount = Advance::where('trip_id', $trip->trip_id)
+                                  ->whereIn('status', ['approved_area', 'approved_regional'])
+                                  ->update(['status' => 'voided']);
+
+            // Update trip status
+            $oldStatus = $trip->status;
+            $trip->status = 'cancelled';
+            $trip->save();
+
+            // Log status history
+            TripStatusHistory::create([
+                'trip_id' => $trip->trip_id,
+                'old_status' => $oldStatus,
+                'new_status' => 'cancelled',
+                'changed_by' => $user->user_id,
+                'notes' => sprintf(
+                    'Trip cancelled. Deleted %d pending advance(s), voided %d approved advance(s)',
+                    $deletedCount,
+                    $voidedCount
+                ),
+                'changed_at' => now()
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Trip cancelled successfully',
+                'data' => [
+                    'trip' => $trip->load('history.changer'),
+                    'deleted_advances' => $deletedCount,
+                    'voided_advances' => $voidedCount
+                ]
+            ]);
+
         } catch (\Exception $e) {
-            Log::error('Cancel trip error: ' . $e->getMessage());
+            DB::rollBack();
+
+            // ✅ FIX: Handle ENUM constraint violation specifically
+            if (str_contains($e->getMessage(), 'Data truncated') || str_contains($e->getMessage(), 'ENUM')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Database configuration error: Missing status value. Please contact administrator.'
+                ], 500);
+            }
 
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to cancel trip: ' . $e->getMessage()
             ], 500);
         }
+    } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Trip not found'
+        ], 404);
+    } catch (\Exception $e) {
+        Log::error('Cancel trip error: ' . $e->getMessage());
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to cancel trip: ' . $e->getMessage()
+        ], 500);
     }
+}
 }

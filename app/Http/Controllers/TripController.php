@@ -479,7 +479,7 @@ class TripController extends Controller
     /**
      * Approve settlement (Finance Area)
      */
-    public function approveSettlement(Request $request, $id)
+    public function approveByArea(Request $request, $id)
     {
         DB::beginTransaction();
         try {

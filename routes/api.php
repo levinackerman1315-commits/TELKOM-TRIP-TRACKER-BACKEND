@@ -88,7 +88,7 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/{id}/submit', [TripController::class, 'submitForReview']);
         Route::post('/{id}/cancel', [TripController::class, 'cancel']);
         Route::post('/{id}/extension', [TripController::class, 'requestExtension']);
-        Route::post('/{id}/cancel-extension', [TripController::class, 'cancelExtension']); // ✅ MOVED HERE!
+        Route::post('/{id}/cancel-extension', [TripController::class, 'cancelExtension']);
 
         // Settlement routes (Finance Area)
         Route::post('/{id}/approve-settlement', [TripController::class, 'approveSettlement']);
@@ -100,11 +100,17 @@ Route::middleware('auth:api')->group(function () {
     
     // --------------------------------------------
     // ADVANCE ROUTES
+    // ✅ FIXED: Route order untuk avoid conflict!
     // --------------------------------------------
     Route::prefix('advances')->group(function () {
-        // CRUD operations
+        // ✅ CRUD - List & Create dulu
         Route::get('/', [AdvanceController::class, 'index']);
         Route::post('/', [AdvanceController::class, 'store']);
+        
+        // ✅ ROUTE SPESIFIK HARUS DULUAN (SEBELUM /{id})!
+        Route::get('/{id}/status-history', [AdvanceController::class, 'getStatusHistory']);
+        
+        // ✅ Route generic terakhir
         Route::get('/{id}', [AdvanceController::class, 'show']);
         Route::delete('/{id}', [AdvanceController::class, 'destroy']);
 
@@ -161,6 +167,7 @@ Route::fallback(function () {
             'GET /api/trips' => 'Get all trips',
             'GET /api/trips/statistics' => 'Get trip statistics',
             'GET /api/trips/{id}/advances' => 'Get advances for specific trip',
+            'GET /api/advances/{id}/status-history' => 'Get advance status history',
             'POST /api/trips/{id}/cancel-extension' => 'Cancel trip extension',
         ]
     ], 404);

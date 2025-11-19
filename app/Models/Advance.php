@@ -9,35 +9,56 @@ class Advance extends Model
 {
     use HasFactory;
 
+    protected $table = 'advances';
     protected $primaryKey = 'advance_id';
-    
-    // ✅ FIX: Enable timestamps
-    public $timestamps = true; // ← UBAH DARI false JADI true!
 
     protected $fillable = [
-        'trip_id', 'advance_number', 'request_type', 'requested_amount',
-        'approved_amount', 'status', 'request_reason', 'transfer_date',
-        'transfer_reference', 'requested_at', 'approved_by_area',
-        'approved_at_area', 'approved_by_regional', 'approved_at_regional',
-        'rejection_reason', 'notes'
+        'trip_id',
+        'advance_number',
+        'request_type',
+        'requested_amount',
+        'approved_amount',
+        'request_reason',
+        'rejection_reason',
+        'notes',
+        'supporting_document_path',
+        'supporting_document_name',
+        'status',
+        'requested_by',
+        'requested_at',
+        'approved_by_area',
+        'approved_at_area',
+        'approved_by_regional',
+        'approved_at_regional',
+        'transfer_date',
+        'transfer_reference'
     ];
 
     protected $casts = [
-        'requested_amount' => 'decimal:2',
-        'approved_amount' => 'decimal:2',
-        'transfer_date' => 'date',
         'requested_at' => 'datetime',
         'approved_at_area' => 'datetime',
         'approved_at_regional' => 'datetime',
-        // ✅ TAMBAH INI untuk fix "Invalid Date"
-        'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'transfer_date' => 'date',
+        'requested_amount' => 'decimal:2',
+        'approved_amount' => 'decimal:2'
     ];
 
-    // Relationships
+    // ✅ Relation ke Trip
     public function trip()
     {
         return $this->belongsTo(Trip::class, 'trip_id', 'trip_id');
+    }
+
+    // ✅ FIX: Ganti dari employee_id ke requested_by!
+    public function employee()
+    {
+        return $this->belongsTo(User::class, 'requested_by', 'user_id');
+    }
+
+    // ✅ Alias untuk employee (lebih jelas)
+    public function requestedBy()
+    {
+        return $this->belongsTo(User::class, 'requested_by', 'user_id');
     }
 
     public function approverArea()
@@ -52,6 +73,7 @@ class Advance extends Model
 
     public function statusHistory()
     {
-        return $this->hasMany(AdvanceStatusHistory::class, 'advance_id', 'advance_id');
+        return $this->hasMany(AdvanceStatusHistory::class, 'advance_id', 'advance_id')
+                    ->orderBy('changed_at', 'desc');
     }
 }

@@ -21,12 +21,14 @@ class AdvanceStatusHistory extends Model
         'changed_at' => 'datetime',
     ];
 
+    // ✅ Relation ke Advance
     public function advance()
     {
         return $this->belongsTo(Advance::class, 'advance_id', 'advance_id');
     }
 
-    public function changer()
+    // ✅ Relation ke User (yang melakukan perubahan status)
+    public function changedBy()
     {
         return $this->belongsTo(User::class, 'changed_by', 'user_id');
     }

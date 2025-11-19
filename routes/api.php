@@ -66,38 +66,36 @@ Route::middleware('auth:api')->group(function () {
     // --------------------------------------------
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
-    
+
     // --------------------------------------------
     // TRIP ROUTES
     // --------------------------------------------
-    // ✅ CRITICAL: statistics HARUS SEBELUM /{id}
-    Route::get('/trips/statistics', [TripController::class, 'statistics']);
-    
     Route::prefix('trips')->group(function () {
-        // CRUD operations
+        // ✅ Statistics MUST BE FIRST (before /{id})
         Route::get('statistics', [TripController::class, 'statistics']);
+        
+        // CRUD operations
         Route::get('/', [TripController::class, 'index']);
         Route::post('/', [TripController::class, 'store']);
         Route::get('/{id}', [TripController::class, 'show']);
         Route::put('/{id}', [TripController::class, 'update']);
-        
+        Route::delete('/{id}', [TripController::class, 'destroy']);
 
-          // ✅ Finance Area - Settlement
-    Route::post('{id}/approve-settlement', [TripController::class, 'approveSettlement']);
-    Route::post('{id}/reject-settlement', [TripController::class, 'rejectSettlement']);
+        // ✅ Get advances by trip (MUST BE BEFORE /{id}/...)
+        Route::get('/{id}/advances', [AdvanceController::class, 'getByTrip']);
 
-      // ✅ Finance Regional - Final Approval
-    Route::post('{id}/approve-settlement-regional', [TripController::class, 'approveSettlementRegional']);
-
-
-        // ✅ INI HARUS ADA - SEBELUM {id}
-    Route::get('{id}/advances', [AdvanceController::class, 'getByTrip']);
         // Trip actions
         Route::post('/{id}/submit', [TripController::class, 'submitForReview']);
         Route::post('/{id}/cancel', [TripController::class, 'cancel']);
         Route::post('/{id}/extension', [TripController::class, 'requestExtension']);
-        
-        // ✅ NEW: Get advances by trip);
+        Route::post('/{id}/cancel-extension', [TripController::class, 'cancelExtension']); // ✅ MOVED HERE!
+
+        // Settlement routes (Finance Area)
+        Route::post('/{id}/approve-settlement', [TripController::class, 'approveSettlement']);
+        Route::post('/{id}/reject-settlement', [TripController::class, 'rejectSettlement']);
+
+        // Settlement routes (Finance Regional)
+        Route::post('/{id}/approve-settlement-regional', [TripController::class, 'approveSettlementRegional']);
     });
     
     // --------------------------------------------
@@ -127,13 +125,9 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/{id}', [ReceiptController::class, 'show']);
         Route::post('/{id}', [ReceiptController::class, 'update']);
         Route::delete('/{id}', [ReceiptController::class, 'delete']);
-        
-
-         // ✅ Finance Area - Verify/Unverify
-
 
         // Receipt actions (Finance)
-        Route::post('/{id}/verify', [ReceiptController::class, 'verify']);//
+        Route::post('/{id}/verify', [ReceiptController::class, 'verify']);
         Route::post('/{id}/unverify', [ReceiptController::class, 'unverify']);
         Route::get('/{id}/download', [ReceiptController::class, 'download']);
     });
@@ -162,11 +156,12 @@ Route::fallback(function () {
             'GET /api/test' => 'Test API connection',
             'GET /api/test-db' => 'Test database connection',
             'POST /api/login' => 'Login user',
-            'POST /api/receipts' => '✅ Upload receipt (FIXED)',
+            'POST /api/receipts' => 'Upload receipt',
             'GET /api/me' => 'Get current user',
             'GET /api/trips' => 'Get all trips',
             'GET /api/trips/statistics' => 'Get trip statistics',
-            'GET /api/trips/{id}/advances' => '✅ Get advances for specific trip',
+            'GET /api/trips/{id}/advances' => 'Get advances for specific trip',
+            'POST /api/trips/{id}/cancel-extension' => 'Cancel trip extension',
         ]
     ], 404);
 });

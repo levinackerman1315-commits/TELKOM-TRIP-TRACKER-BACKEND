@@ -10,6 +10,7 @@ use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SettlementController;
 use App\Http\Controllers\TripReviewController;
+use App\Http\Controllers\UserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -148,6 +149,27 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
         Route::delete('/{id}', [NotificationController::class, 'delete']);
     });
+
+
+       Route::prefix('users')->group(function () {
+        // ✅ Statistics HARUS DULUAN (sebelum /{id})
+        Route::get('/statistics', [UserController::class, 'statistics']);
+        
+
+        // ✅ TAMBAH: Real-time validation endpoints (HARUS SEBELUM /{id})
+        Route::get('/check-nik', [UserController::class, 'checkNik']);
+        Route::get('/check-email', [UserController::class, 'checkEmail']);
+        // CRUD operations
+        Route::get('/', [UserController::class, 'index']);
+        Route::post('/', [UserController::class, 'store']);
+        Route::get('/{id}', [UserController::class, 'show']);
+        Route::put('/{id}', [UserController::class, 'update']);
+        Route::delete('/{id}', [UserController::class, 'destroy']);
+        
+        // Reactivate user
+        Route::post('/{id}/activate', [UserController::class, 'activate']);
+    });
+    
     
 });
 

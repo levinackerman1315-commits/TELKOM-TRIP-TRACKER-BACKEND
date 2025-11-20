@@ -25,8 +25,12 @@ class User extends Authenticatable implements JWTSubject
         'department',
         'position',
         'office_location',
-        'area',
-        'regional',
+        'area',              // ✅ Keep existing
+        'regional',          // ✅ Keep existing
+        'area_code',         // ✅ TAMBAH - for HR module
+        'bank_account',      // ✅ TAMBAH - for bank info
+        'bank_name',         // ✅ TAMBAH - for bank info
+        'is_active',         // ✅ TAMBAH - for user status
     ];
 
     protected $hidden = [
@@ -38,6 +42,12 @@ class User extends Authenticatable implements JWTSubject
         'email_verified_at' => 'datetime',
         'last_login' => 'datetime',
         'password' => 'hashed',
+        'is_active' => 'boolean',  // ✅ TAMBAH cast
+    ];
+
+    // ✅ Default values
+    protected $attributes = [
+        'is_active' => 1,  // Default active
     ];
 
     // JWT Methods

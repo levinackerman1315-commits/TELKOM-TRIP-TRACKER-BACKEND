@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
+use App\Helpers\NotificationHelper; // ✅ ADD THIS!
 
 class TripController extends Controller
 {
@@ -314,6 +315,7 @@ class TripController extends Controller
 
     /**
      * Request trip extension
+     * ✅ ADD NOTIFICATION!
      */
     public function requestExtension(Request $request, $id)
     {
@@ -363,6 +365,9 @@ class TripController extends Controller
             'changed_at' => now()
         ]);
 
+        // ✅ CREATE NOTIFICATION!
+        NotificationHelper::tripExtensionRequested($trip);
+
         return response()->json([
             'success' => true,
             'message' => 'Extension request submitted successfully',
@@ -371,7 +376,8 @@ class TripController extends Controller
     }
 
     /**
-     * ✅ NEW: Cancel trip extension
+     * ✅ Cancel trip extension
+     * ✅ ADD NOTIFICATION!
      */
     public function cancelExtension($id)
     {
@@ -422,6 +428,9 @@ class TripController extends Controller
                 'changed_at' => now()
             ]);
             
+            // ✅ CREATE NOTIFICATION!
+            NotificationHelper::tripExtensionCancelled($trip);
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Extension cancelled successfully',
@@ -439,6 +448,7 @@ class TripController extends Controller
 
     /**
      * Submit trip for review (after trip ends)
+     * ✅ ADD NOTIFICATION!
      */
     public function submitForReview($id)
     {
@@ -469,6 +479,9 @@ class TripController extends Controller
             'changed_at' => now()
         ]);
 
+        // ✅ CREATE NOTIFICATION!
+        NotificationHelper::tripStatusChanged($trip, 'awaiting_review');
+
         return response()->json([
             'success' => true,
             'message' => 'Trip submitted for review',
@@ -478,6 +491,7 @@ class TripController extends Controller
 
     /**
      * Approve settlement (Finance Area)
+     * ✅ ADD NOTIFICATION!
      */
     public function approveByArea(Request $request, $id)
     {
@@ -504,6 +518,9 @@ class TripController extends Controller
                 'changed_at' => now()
             ]);
             
+            // ✅ CREATE NOTIFICATION!
+            NotificationHelper::tripStatusChanged($trip, 'under_review_regional');
+            
             DB::commit();
             
             return response()->json([
@@ -523,6 +540,7 @@ class TripController extends Controller
 
     /**
      * Reject settlement (Finance Area)
+     * ✅ ADD NOTIFICATION!
      */
     public function rejectSettlement(Request $request, $id)
     {
@@ -547,6 +565,9 @@ class TripController extends Controller
                 'changed_at' => now()
             ]);
             
+            // ✅ CREATE NOTIFICATION!
+            NotificationHelper::tripStatusChanged($trip, 'active', $request->rejection_reason);
+            
             DB::commit();
             
             return response()->json([
@@ -566,6 +587,7 @@ class TripController extends Controller
 
     /**
      * Approve settlement (Finance Regional)
+     * ✅ ADD NOTIFICATION!
      */
     public function approveSettlementRegional(Request $request, $id)
     {
@@ -592,6 +614,9 @@ class TripController extends Controller
                 'changed_at' => now()
             ]);
             
+            // ✅ CREATE NOTIFICATION!
+            NotificationHelper::tripStatusChanged($trip, 'completed');
+            
             DB::commit();
             
             return response()->json([
@@ -611,6 +636,7 @@ class TripController extends Controller
 
     /**
      * Cancel trip
+     * ✅ ADD NOTIFICATION!
      */
     public function cancel(Request $request, $id)
     {
@@ -656,18 +682,23 @@ class TripController extends Controller
                 $trip->status = 'cancelled';
                 $trip->save();
 
+                $cancelNotes = sprintf(
+                    'Trip cancelled. Deleted %d pending advance(s), voided %d approved advance(s)',
+                    $deletedCount,
+                    $voidedCount
+                );
+
                 TripStatusHistory::create([
                     'trip_id' => $trip->trip_id,
                     'old_status' => $oldStatus,
                     'new_status' => 'cancelled',
                     'changed_by' => $user->user_id,
-                    'notes' => sprintf(
-                        'Trip cancelled. Deleted %d pending advance(s), voided %d approved advance(s)',
-                        $deletedCount,
-                        $voidedCount
-                    ),
+                    'notes' => $cancelNotes,
                     'changed_at' => now()
                 ]);
+
+                // ✅ CREATE NOTIFICATION!
+                NotificationHelper::tripStatusChanged($trip, 'cancelled', $cancelNotes);
 
                 DB::commit();
 

@@ -8,8 +8,6 @@ use App\Http\Controllers\TripController;
 use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\NotificationController;
-use App\Http\Controllers\SettlementController;
-use App\Http\Controllers\TripReviewController;
 use App\Http\Controllers\UserController;
 
 /*
@@ -91,11 +89,9 @@ Route::middleware('auth:api')->group(function () {
         Route::post('/{id}/extension', [TripController::class, 'requestExtension']);
         Route::post('/{id}/cancel-extension', [TripController::class, 'cancelExtension']);
 
-        // Settlement routes (Finance Area)
-        Route::post('/{id}/approve-settlement', [TripController::class, 'approveSettlement']);
+        // ✅ FIXED: Settlement routes - Ganti method name!
+        Route::post('/{id}/approve-settlement', [TripController::class, 'approveByArea']);
         Route::post('/{id}/reject-settlement', [TripController::class, 'rejectSettlement']);
-
-        // Settlement routes (Finance Regional)
         Route::post('/{id}/approve-settlement-regional', [TripController::class, 'approveSettlementRegional']);
     });
     
@@ -150,15 +146,17 @@ Route::middleware('auth:api')->group(function () {
         Route::delete('/{id}', [NotificationController::class, 'delete']);
     });
 
-
-       Route::prefix('users')->group(function () {
+    // --------------------------------------------
+    // USER MANAGEMENT ROUTES (HR)
+    // --------------------------------------------
+    Route::prefix('users')->group(function () {
         // ✅ Statistics HARUS DULUAN (sebelum /{id})
         Route::get('/statistics', [UserController::class, 'statistics']);
         
-
-        // ✅ TAMBAH: Real-time validation endpoints (HARUS SEBELUM /{id})
+        // ✅ Real-time validation endpoints (HARUS SEBELUM /{id})
         Route::get('/check-nik', [UserController::class, 'checkNik']);
         Route::get('/check-email', [UserController::class, 'checkEmail']);
+        
         // CRUD operations
         Route::get('/', [UserController::class, 'index']);
         Route::post('/', [UserController::class, 'store']);
@@ -169,8 +167,6 @@ Route::middleware('auth:api')->group(function () {
         // Reactivate user
         Route::post('/{id}/activate', [UserController::class, 'activate']);
     });
-    
-    
 });
 
 // ========================================
@@ -191,6 +187,9 @@ Route::fallback(function () {
             'GET /api/trips/{id}/advances' => 'Get advances for specific trip',
             'GET /api/advances/{id}/status-history' => 'Get advance status history',
             'POST /api/trips/{id}/cancel-extension' => 'Cancel trip extension',
+            'POST /api/trips/{id}/approve-settlement' => 'Finance Area approve settlement',
+            'POST /api/trips/{id}/reject-settlement' => 'Finance Area reject settlement',
+            'POST /api/trips/{id}/approve-settlement-regional' => 'Finance Regional approve settlement',
         ]
     ], 404);
 });

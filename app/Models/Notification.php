@@ -13,8 +13,16 @@ class Notification extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'user_id', 'trip_id', 'advance_id', 'type', 'title', 'message',
-        'is_read', 'read_at', 'created_at'
+        'user_id', 
+        'trip_id', 
+        'advance_id', 
+        'type', 
+        'title', 
+        'message',
+        'link',  // ✅ TAMBAH INI!
+        'is_read', 
+        'read_at', 
+        'created_at'
     ];
 
     protected $casts = [

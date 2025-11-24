@@ -77,26 +77,61 @@ class NotificationHelper
     /**
      * Create notification for trip extension
      */
-    public static function tripExtensionRequested($trip)
-    {
-        try {
+   public static function tripExtensionRequested($trip)
+{
+    try {
+        // ✅ 1. Notification untuk EMPLOYEE (confirmation)
+        Notification::create([
+            'user_id' => $trip->user_id,
+            'trip_id' => $trip->trip_id,
+            'type' => 'success',
+            'title' => 'Trip Extended Successfully',
+            'message' => "Your trip to {$trip->destination} has been extended until " . date('d M Y', strtotime($trip->extended_end_date)) . ". Reason: {$trip->extension_reason}",
+            'link' => "/employee/trips/{$trip->trip_id}",
+            'is_read' => false,
+            'created_at' => now(),
+        ]);
+
+        // ✅ 2. Notification untuk FINANCE AREA (info only)
+        // Get all Finance Area users in the same area as employee
+        $financeAreaUsers = \App\Models\User::where('role', 'finance_area')
+            ->where('area_code', $trip->user->area_code)
+            ->get();
+        
+        foreach ($financeAreaUsers as $financeUser) {
             Notification::create([
-                'user_id' => $trip->user_id,
+                'user_id' => $financeUser->user_id,
                 'trip_id' => $trip->trip_id,
                 'type' => 'info',
-                'title' => 'Trip Extension Requested',
-                'message' => "Your extension request for trip to {$trip->destination} until " . date('d M Y', strtotime($trip->extended_end_date)) . " has been submitted.",
-                'link' => "/employee/trips/{$trip->trip_id}",
+                'title' => 'Trip Extended',
+                'message' => "Employee {$trip->user->name} has extended trip to {$trip->destination} until " . date('d M Y', strtotime($trip->extended_end_date)) . ". Reason: {$trip->extension_reason}",
+                'link' => "/finance-area/trips/{$trip->trip_id}",
                 'is_read' => false,
                 'created_at' => now(),
             ]);
-
-            Log::info("✅ Extension notification created for trip {$trip->trip_id}");
-        } catch (\Exception $e) {
-            Log::error("❌ Failed to create extension notification: " . $e->getMessage());
         }
-    }
 
+        // ✅ 3. Notification untuk FINANCE REGIONAL (info only - for audit)
+        $financeRegionalUsers = \App\Models\User::where('role', 'finance_regional')->get();
+        
+        foreach ($financeRegionalUsers as $regionalUser) {
+            Notification::create([
+                'user_id' => $regionalUser->user_id,
+                'trip_id' => $trip->trip_id,
+                'type' => 'info',
+                'title' => 'Trip Extended (Audit)',
+                'message' => "Employee {$trip->user->name} ({$trip->user->area_code}) extended trip to {$trip->destination} until " . date('d M Y', strtotime($trip->extended_end_date)) . ". This may affect settlement review.",
+                'link' => "/finance-regional/settlements/{$trip->trip_id}",
+                'is_read' => false,
+                'created_at' => now(),
+            ]);
+        }
+
+        Log::info("✅ Extension notifications created for trip {$trip->trip_id} (Employee + Finance Area + Finance Regional)");
+    } catch (\Exception $e) {
+        Log::error("❌ Failed to create extension notification: " . $e->getMessage());
+    }
+}
     /**
      * Create notification for trip extension cancelled
      */

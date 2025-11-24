@@ -25,12 +25,14 @@ class User extends Authenticatable implements JWTSubject
         'department',
         'position',
         'office_location',
-        'area',              // ✅ Keep existing
-        'regional',          // ✅ Keep existing
-        'area_code',         // ✅ TAMBAH - for HR module
-        'bank_account',      // ✅ TAMBAH - for bank info
-        'bank_name',         // ✅ TAMBAH - for bank info
-        'is_active',         // ✅ TAMBAH - for user status
+        'area',
+        'regional',
+        'area_code',
+        'bank_account',           // ✅ For advance transfers
+        'bank_name',              // ✅ For advance transfers
+        'is_active',
+        'password_changed_at',    // ✅ Track password changes
+        'must_change_password',   // ✅ Force password change for new users
     ];
 
     protected $hidden = [
@@ -42,12 +44,14 @@ class User extends Authenticatable implements JWTSubject
         'email_verified_at' => 'datetime',
         'last_login' => 'datetime',
         'password' => 'hashed',
-        'is_active' => 'boolean',  // ✅ TAMBAH cast
+        'is_active' => 'boolean',
+        'must_change_password' => 'boolean',
+        'password_changed_at' => 'datetime',
     ];
 
-    // ✅ Default values
     protected $attributes = [
-        'is_active' => 1,  // Default active
+        'is_active' => 1,
+        'must_change_password' => true,
     ];
 
     // JWT Methods
@@ -62,6 +66,7 @@ class User extends Authenticatable implements JWTSubject
             'user_id' => $this->user_id,
             'role' => $this->role,
             'email' => $this->email,
+            'must_change_password' => $this->must_change_password,
         ];
     }
 

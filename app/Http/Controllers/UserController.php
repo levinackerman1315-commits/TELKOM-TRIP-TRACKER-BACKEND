@@ -8,9 +8,219 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
 {
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * PROFILE MANAGEMENT (ALL AUTHENTICATED USERS)
+     * ═══════════════════════════════════════════════════════════
+     */
+
+    /**
+     * Get authenticated user profile
+     * GET /api/user/profile
+     */
+    public function getProfile()
+    {
+        try {
+            // ✅ FIX: Get user dari User model, bukan dari auth guard
+            $user = User::find(auth('api')->id());
+            
+            if (!$user) {
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
+
+            return response()->json([
+                'success' => true,
+                'user' => [
+                    'user_id' => $user->user_id,
+                    'nik' => $user->nik,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'phone' => $user->phone,
+                    'department' => $user->department,
+                    'position' => $user->position,
+                    'office_location' => $user->office_location,
+                    'area_code' => $user->area_code,
+                    'regional' => $user->regional,
+                    'bank_account' => $user->bank_account,
+                    'bank_name' => $user->bank_name,
+                    'must_change_password' => $user->must_change_password,
+                    'password_changed_at' => $user->password_changed_at,
+                    'created_at' => $user->created_at,
+                    'last_login' => $user->last_login,
+                ]
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Get Profile Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to fetch profile'
+            ], 500);
+        }
+    }
+
+    /**
+     * Change password (for all users)
+     * POST /api/user/change-password
+     */
+    public function changePassword(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'old_password' => 'required|string',
+            'new_password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                Password::min(8)
+                    ->mixedCase()
+                    ->numbers()
+            ],
+        ], [
+            'old_password.required' => 'Current password is required',
+            'new_password.required' => 'New password is required',
+            'new_password.min' => 'New password must be at least 8 characters',
+            'new_password.confirmed' => 'Password confirmation does not match',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // ✅ FIX: Get user dari User model untuk akses save() method
+            $user = User::find(auth('api')->id());
+            
+            if (!$user) {
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
+
+            // ✅ Verify old password
+            if (!Hash::check($request->old_password, $user->password)) {
+                Log::warning("Change password failed: Invalid old password for user {$user->email}");
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Current password is incorrect'
+                ], 422);
+            }
+
+            // ✅ Check if new password is same as old
+            if (Hash::check($request->new_password, $user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'New password must be different from current password'
+                ], 422);
+            }
+
+            // ✅ Update password - Sekarang save() akan work!
+            $user->password = Hash::make($request->new_password);
+            $user->password_changed_at = now();
+            $user->must_change_password = false;
+            $user->save();
+
+            Log::info("✅ Password changed successfully for user: {$user->email}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password changed successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Change Password Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to change password'
+            ], 500);
+        }
+    }
+
+    /**
+     * Update profile (phone, bank info)
+     * PUT /api/user/update-profile
+     */
+    public function updateProfile(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'phone' => 'nullable|string|max:20|regex:/^[0-9+\-\s()]+$/',
+            'bank_account' => 'nullable|string|max:30|regex:/^[0-9]+$/',
+            'bank_name' => 'nullable|string|max:50',
+        ], [
+            'phone.regex' => 'Phone number format is invalid',
+            'phone.max' => 'Phone number cannot exceed 20 characters',
+            'bank_account.regex' => 'Bank account must contain only numbers',
+            'bank_account.max' => 'Bank account cannot exceed 30 characters',
+            'bank_name.max' => 'Bank name cannot exceed 50 characters',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // ✅ FIX: Get user dari User model untuk akses save() method
+            $user = User::find(auth('api')->id());
+            
+            if (!$user) {
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
+
+            // ✅ Update fields
+            if ($request->has('phone')) {
+                $user->phone = $request->phone;
+            }
+
+            if ($request->has('bank_account')) {
+                $user->bank_account = $request->bank_account;
+            }
+
+            if ($request->has('bank_name')) {
+                $user->bank_name = $request->bank_name;
+            }
+
+            $user->save();
+
+            Log::info("✅ Profile updated for user: {$user->email}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile updated successfully',
+                'user' => [
+                    'user_id' => $user->user_id,
+                    'phone' => $user->phone,
+                    'bank_account' => $user->bank_account,
+                    'bank_name' => $user->bank_name,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Update Profile Error: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update profile'
+            ], 500);
+        }
+    }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * USER MANAGEMENT (HR ONLY)
+     * ═══════════════════════════════════════════════════════════
+     */
+
     /**
      * Display a listing of all users (HR Dashboard)
      */
@@ -44,9 +254,8 @@ class UserController extends Controller
             $sortOrder = $request->get('sort_order', 'desc');
             $query->orderBy($sortBy, $sortOrder);
 
-            // ✅ Pagination
-            $perPage = $request->get('per_page', 20);
-            $users = $query->paginate($perPage);
+            // ✅ Get all users (tanpa pagination untuk dashboard)
+            $users = $query->get();
 
             return response()->json([
                 'success' => true,
@@ -143,7 +352,7 @@ class UserController extends Controller
                 'position' => 'nullable|string|max:50',
                 'office_location' => 'nullable|string|max:50',
                 'area_code' => 'nullable|string|max:20',
-                'regional' => 'nullable|string|max:50',  // ✅ TAMBAH regional
+                'regional' => 'nullable|string|max:50',
                 'bank_account' => 'nullable|string|max:30',
                 'bank_name' => 'nullable|string|max:50',
             ]);
@@ -168,7 +377,7 @@ class UserController extends Controller
                 'position' => $request->position,
                 'office_location' => $request->office_location,
                 'area_code' => $request->area_code,
-                'regional' => $request->regional,  // ✅ TAMBAH regional
+                'regional' => $request->regional,
                 'bank_account' => $request->bank_account,
                 'bank_name' => $request->bank_name,
                 'is_active' => 1
@@ -215,7 +424,7 @@ class UserController extends Controller
                 'position' => 'nullable|string|max:50',
                 'office_location' => 'nullable|string|max:50',
                 'area_code' => 'nullable|string|max:20',
-                'regional' => 'nullable|string|max:50',  // ✅ TAMBAH regional
+                'regional' => 'nullable|string|max:50',
                 'bank_account' => 'nullable|string|max:30',
                 'bank_name' => 'nullable|string|max:50',
                 'is_active' => 'sometimes|boolean'
@@ -272,9 +481,9 @@ class UserController extends Controller
             $user = User::findOrFail($id);
 
             // ✅ Prevent deleting yourself
-            $currentUserId = Auth::id();
+            $currentUserId = auth('api')->id();
             
-            // ✅ FIX: Use loose comparison (==) instead of strict (===)
+            // ✅ Use loose comparison (==) to handle type differences
             if ($currentUserId == $id || $currentUserId == $user->user_id) {
                 return response()->json([
                     'success' => false,
@@ -302,127 +511,128 @@ class UserController extends Controller
         }
     }
 
-
     /**
- * Check if NIK is available (for real-time validation)
- */
-public function checkNik(Request $request)
-{
-    try {
-        $nik = $request->query('nik');
-        $userId = $request->query('user_id'); // For edit mode (exclude current user)
+     * Check if NIK is available (for real-time validation)
+     */
+    public function checkNik(Request $request)
+    {
+        try {
+            $nik = $request->query('nik');
+            $userId = $request->query('user_id'); // For edit mode (exclude current user)
 
-        if (!$nik) {
+            if (!$nik) {
+                return response()->json([
+                    'success' => false,
+                    'available' => false,
+                    'message' => 'NIK is required'
+                ], 400);
+            }
+
+            // Check if NIK exists
+            $query = User::where('nik', $nik);
+            
+            // Exclude current user when editing
+            if ($userId) {
+                $query->where('user_id', '!=', $userId);
+            }
+
+            $exists = $query->exists();
+            
+            // ✅ Get existing user if found
+            $existingUser = $exists ? $query->first() : null;
+
+            return response()->json([
+                'success' => true,
+                'available' => !$exists,
+                'nik' => $nik,
+                'existing_user_id' => $existingUser ? $existingUser->user_id : null,
+                'message' => $exists ? 'NIK already taken' : 'NIK is available'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error checking NIK: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'available' => false,
-                'message' => 'NIK is required'
-            ], 400);
+                'message' => 'Failed to check NIK'
+            ], 500);
         }
-
-        // Check if NIK exists
-        $query = User::where('nik', $nik);
-        
-        // Exclude current user when editing
-        if ($userId) {
-            $query->where('user_id', '!=', $userId);
-        }
-
-        $exists = $query->exists();
-        
-        // ✅ Get existing user if found
-        $existingUser = $exists ? $query->first() : null;
-
-        return response()->json([
-            'success' => true,
-            'available' => !$exists,
-            'nik' => $nik,
-            'existing_user_id' => $existingUser ? $existingUser->user_id : null,
-            'message' => $exists ? 'NIK already taken' : 'NIK is available'
-        ]);
-
-    } catch (\Exception $e) {
-        Log::error('Error checking NIK: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'available' => false,
-            'message' => 'Failed to check NIK'
-        ], 500);
     }
-}
 
-/**
- * Check if Email is available (for real-time validation)
- */
-public function checkEmail(Request $request)
-{
-    try {
-        $email = $request->query('email');
-        $userId = $request->query('user_id'); // For edit mode (exclude current user)
+    /**
+     * Check if Email is available (for real-time validation)
+     */
+    public function checkEmail(Request $request)
+    {
+        try {
+            $email = $request->query('email');
+            $userId = $request->query('user_id'); // For edit mode (exclude current user)
 
-        if (!$email) {
+            if (!$email) {
+                return response()->json([
+                    'success' => false,
+                    'available' => false,
+                    'message' => 'Email is required'
+                ], 400);
+            }
+
+            // Check if Email exists
+            $query = User::where('email', $email);
+            
+            // Exclude current user when editing
+            if ($userId) {
+                $query->where('user_id', '!=', $userId);
+            }
+
+            $exists = $query->exists();
+            
+            // ✅ Get existing user if found
+            $existingUser = $exists ? $query->first() : null;
+
+            return response()->json([
+                'success' => true,
+                'available' => !$exists,
+                'email' => $email,
+                'existing_user_id' => $existingUser ? $existingUser->user_id : null,
+                'message' => $exists ? 'Email already taken' : 'Email is available'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error checking email: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'available' => false,
-                'message' => 'Email is required'
-            ], 400);
+                'message' => 'Failed to check email'
+            ], 500);
         }
-
-        // Check if Email exists
-        $query = User::where('email', $email);
-        
-        // Exclude current user when editing
-        if ($userId) {
-            $query->where('user_id', '!=', $userId);
-        }
-
-        $exists = $query->exists();
-        
-        // ✅ Get existing user if found
-        $existingUser = $exists ? $query->first() : null;
-
-        return response()->json([
-            'success' => true,
-            'available' => !$exists,
-            'email' => $email,
-            'existing_user_id' => $existingUser ? $existingUser->user_id : null,
-            'message' => $exists ? 'Email already taken' : 'Email is available'
-        ]);
-
-    } catch (\Exception $e) {
-        Log::error('Error checking email: ' . $e->getMessage());
-        return response()->json([
-            'success' => false,
-            'available' => false,
-            'message' => 'Failed to check email'
-        ], 500);
     }
-}
 
     /**
-     * Reactivate deactivated user
+     * Reactivate deactivated user OR Toggle user status
      */
     public function activate($id)
     {
         try {
             $user = User::findOrFail($id);
             
-            // ✅ Set is_active to 1
-            $user->update(['is_active' => 1]);
+            // ✅ Toggle status: if active make inactive, if inactive make active
+            $newStatus = !$user->is_active;
+            $user->update(['is_active' => $newStatus]);
 
-            Log::info('User activated successfully', ['user_id' => $user->user_id]);
+            $action = $newStatus ? 'activated' : 'deactivated';
+            Log::info("User {$action} successfully", ['user_id' => $user->user_id]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'User activated successfully',
+                'message' => "User {$action} successfully",
                 'user' => $user->makeHidden(['password'])
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error activating user: ' . $e->getMessage());
+            Log::error('Error toggling user status: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to activate user',
+                'message' => 'Failed to toggle user status',
                 'error' => $e->getMessage()
             ], 500);
         }

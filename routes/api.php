@@ -66,6 +66,16 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    // ✅ TAMBAH INI - PROFILE ROUTES
+    // --------------------------------------------
+    // USER PROFILE ROUTES (All authenticated users)
+    // --------------------------------------------
+    Route::prefix('user')->group(function () {
+        Route::get('/profile', [UserController::class, 'getProfile']);
+        Route::post('/change-password', [UserController::class, 'changePassword']);
+        Route::put('/update-profile', [UserController::class, 'updateProfile']);
+    });
+
     // --------------------------------------------
     // TRIP ROUTES
     // --------------------------------------------
@@ -190,6 +200,10 @@ Route::fallback(function () {
             'POST /api/trips/{id}/approve-settlement' => 'Finance Area approve settlement',
             'POST /api/trips/{id}/reject-settlement' => 'Finance Area reject settlement',
             'POST /api/trips/{id}/approve-settlement-regional' => 'Finance Regional approve settlement',
+            // ✅ TAMBAH PROFILE ENDPOINTS
+            'GET /api/user/profile' => 'Get user profile',
+            'POST /api/user/change-password' => 'Change password',
+            'PUT /api/user/update-profile' => 'Update profile (phone, bank)',
         ]
     ], 404);
 });

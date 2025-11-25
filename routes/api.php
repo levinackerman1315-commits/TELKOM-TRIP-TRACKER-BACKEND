@@ -66,7 +66,6 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // ✅ TAMBAH INI - PROFILE ROUTES
     // --------------------------------------------
     // USER PROFILE ROUTES (All authenticated users)
     // --------------------------------------------
@@ -167,6 +166,9 @@ Route::middleware('auth:api')->group(function () {
         Route::get('/check-nik', [UserController::class, 'checkNik']);
         Route::get('/check-email', [UserController::class, 'checkEmail']);
         
+        // 🆕 BULK UPLOAD ROUTE (HARUS SEBELUM /{id})
+        Route::post('/bulk-create', [UserController::class, 'bulkCreate']);
+        
         // CRUD operations
         Route::get('/', [UserController::class, 'index']);
         Route::post('/', [UserController::class, 'store']);
@@ -200,10 +202,18 @@ Route::fallback(function () {
             'POST /api/trips/{id}/approve-settlement' => 'Finance Area approve settlement',
             'POST /api/trips/{id}/reject-settlement' => 'Finance Area reject settlement',
             'POST /api/trips/{id}/approve-settlement-regional' => 'Finance Regional approve settlement',
-            // ✅ TAMBAH PROFILE ENDPOINTS
+            // Profile endpoints
             'GET /api/user/profile' => 'Get user profile',
             'POST /api/user/change-password' => 'Change password',
             'PUT /api/user/update-profile' => 'Update profile (phone, bank)',
+            // User management endpoints
+            'GET /api/users' => 'Get all users (HR)',
+            'POST /api/users' => 'Create new user (HR)',
+            'POST /api/users/bulk-create' => '🆕 Bulk create users from Excel (HR)',
+            'GET /api/users/{id}' => 'Get user details (HR)',
+            'PUT /api/users/{id}' => 'Update user (HR)',
+            'DELETE /api/users/{id}' => 'Delete user (HR)',
+            'POST /api/users/{id}/activate' => 'Toggle user status (HR)',
         ]
     ], 404);
 });

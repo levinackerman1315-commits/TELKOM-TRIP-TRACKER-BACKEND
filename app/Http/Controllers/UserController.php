@@ -637,4 +637,184 @@ class UserController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * ═══════════════════════════════════════════════════════════
+     * BULK UPLOAD USERS FROM EXCEL
+     * ═══════════════════════════════════════════════════════════
+     */
+
+    /**
+     * Bulk create users from Excel upload
+     * POST /api/users/bulk-create
+     */
+    public function bulkCreate(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'users' => 'required|array|min:1',
+                'users.*.nik' => ['required', 'string', 'min:6', 'max:8', 'regex:/^[A-Za-z0-9]+$/'],
+                'users.*.name' => 'required|string|max:100',
+                'users.*.email' => ['required', 'email', 'regex:/^[a-zA-Z0-9._%+-]+@telkomakses\.co\.id$/'],
+                'users.*.role' => 'required|in:employee,finance_area,finance_regional,hr',
+                'users.*.phone' => ['nullable', 'string', 'regex:/^(08|628)[0-9]{8,11}$/'],
+                'users.*.department' => 'nullable|string|max:50',
+                'users.*.position' => 'nullable|string|max:50',
+                'users.*.office_location' => 'nullable|string|max:100',
+                'users.*.area' => 'nullable|string|max:50',
+                'users.*.regional' => 'nullable|string|max:50',
+                'users.*.area_code' => 'nullable|string|max:10',
+                'users.*.bank_name' => 'nullable|string|max:50',
+                'users.*.bank_account' => 'nullable|string|max:20',
+            ], [
+                'users.*.nik.min' => 'NIK must be at least 6 characters',
+                'users.*.nik.max' => 'NIK cannot exceed 8 characters',
+                'users.*.nik.regex' => 'NIK must contain only letters and numbers',
+                'users.*.email.regex' => 'Email must use @telkomakses.co.id domain',
+                'users.*.phone.regex' => 'Phone must start with 08 or 628',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $users = $request->users;
+            $successCount = 0;
+            $failedRows = [];
+            $createdUsers = [];
+
+            // Get existing NIKs and Emails from database
+            $existingNiks = User::pluck('nik')->toArray();
+            $existingEmails = User::pluck('email')->toArray();
+
+            // Extract NIKs and Emails from uploaded data
+            $uploadedNiks = array_column($users, 'nik');
+            $uploadedEmails = array_column($users, 'email');
+
+            foreach ($users as $index => $userData) {
+                $rowNumber = $index + 2; // Excel row number (header is row 1)
+                $errors = [];
+
+                Log::info("Processing row {$rowNumber}", ['data' => $userData]);
+
+                // ✅ Check NIK duplicate in database
+                if (in_array($userData['nik'], $existingNiks)) {
+                    $errors[] = "NIK '{$userData['nik']}' already exists in database";
+                    Log::warning("Row {$rowNumber}: NIK duplicate in database", ['nik' => $userData['nik']]);
+                }
+
+                // ✅ Check NIK duplicate within Excel (excluding current row)
+                $nikOccurrences = array_keys($uploadedNiks, $userData['nik']);
+                if (count($nikOccurrences) > 1) {
+                    $firstOccurrence = $nikOccurrences[0] + 2;
+                    if ($firstOccurrence != $rowNumber) {
+                        $errors[] = "NIK '{$userData['nik']}' already exists in row {$firstOccurrence}";
+                        Log::warning("Row {$rowNumber}: NIK duplicate in Excel", ['nik' => $userData['nik']]);
+                    }
+                }
+
+                // ✅ Check Email duplicate in database
+                if (in_array($userData['email'], $existingEmails)) {
+                    $errors[] = "Email '{$userData['email']}' already exists in database";
+                    Log::warning("Row {$rowNumber}: Email duplicate in database", ['email' => $userData['email']]);
+                }
+
+                // ✅ Check Email duplicate within Excel (excluding current row)
+                $emailOccurrences = array_keys($uploadedEmails, $userData['email']);
+                if (count($emailOccurrences) > 1) {
+                    $firstOccurrence = $emailOccurrences[0] + 2;
+                    if ($firstOccurrence != $rowNumber) {
+                        $errors[] = "Email '{$userData['email']}' already exists in row {$firstOccurrence}";
+                        Log::warning("Row {$rowNumber}: Email duplicate in Excel", ['email' => $userData['email']]);
+                    }
+                }
+
+                // ✅ If validation errors found, skip this row
+                if (count($errors) > 0) {
+                    $failedRows[] = [
+                        'row' => $rowNumber,
+                        'data' => $userData,
+                        'errors' => $errors
+                    ];
+                    Log::warning("Row {$rowNumber} skipped due to validation errors", ['errors' => $errors]);
+                    continue;
+                }
+
+                // ✅ Create user
+                try {
+                    Log::info("Attempting to create user for row {$rowNumber}", ['nik' => $userData['nik']]);
+                    
+                    $user = User::create([
+                        'nik' => $userData['nik'],
+                        'name' => $userData['name'],
+                        'email' => $userData['email'],
+                        'password' => Hash::make('TelkomAkses123'), // Default password
+                        'role' => $userData['role'],
+                        'phone' => isset($userData['phone']) && !empty($userData['phone']) ? $userData['phone'] : null,
+                        'department' => isset($userData['department']) && !empty($userData['department']) ? $userData['department'] : null,
+                        'position' => isset($userData['position']) && !empty($userData['position']) ? $userData['position'] : null,
+                        'office_location' => isset($userData['office_location']) && !empty($userData['office_location']) ? $userData['office_location'] : null,
+                        'regional' => isset($userData['regional']) && !empty($userData['regional']) ? $userData['regional'] : null,
+                        'area_code' => isset($userData['area_code']) && !empty($userData['area_code']) ? $userData['area_code'] : null,
+                        'bank_name' => isset($userData['bank_name']) && !empty($userData['bank_name']) ? $userData['bank_name'] : null,
+                        'bank_account' => isset($userData['bank_account']) && !empty($userData['bank_account']) ? $userData['bank_account'] : null,
+                        'is_active' => 1,
+                        'must_change_password' => true,
+                    ]);
+
+                    $successCount++;
+                    $createdUsers[] = $user->makeHidden(['password']);
+                    
+                    // ✅ Add to existing arrays to prevent duplicates in subsequent rows
+                    $existingNiks[] = $userData['nik'];
+                    $existingEmails[] = $userData['email'];
+
+                    Log::info("✅ Row {$rowNumber}: User created successfully", [
+                        'user_id' => $user->user_id,
+                        'nik' => $userData['nik'],
+                        'email' => $userData['email']
+                    ]);
+
+                } catch (\Exception $e) {
+                    $errorMessage = $e->getMessage();
+                    $failedRows[] = [
+                        'row' => $rowNumber,
+                        'data' => $userData,
+                        'errors' => ['Failed to create user: ' . $errorMessage]
+                    ];
+                    Log::error("❌ Row {$rowNumber}: Bulk create failed", [
+                        'error' => $errorMessage,
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                }
+            }
+
+            Log::info("Bulk upload completed", [
+                'success_count' => $successCount,
+                'failed_count' => count($failedRows)
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => "Bulk upload completed. {$successCount} user(s) created, " . count($failedRows) . " failed.",
+                'data' => [
+                    'success_count' => $successCount,
+                    'failed_count' => count($failedRows),
+                    'created_users' => $createdUsers,
+                    'failed_rows' => $failedRows
+                ]
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error('Error in bulk create: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to process bulk upload: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

@@ -55,6 +55,9 @@ class ReceiptController extends Controller
     /**
      * Upload receipt
      */
+    /**
+     * Upload receipt
+     */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -62,7 +65,7 @@ class ReceiptController extends Controller
             'advance_id' => 'nullable|exists:advances,advance_id',
             'receipt_date' => 'required|date',
             'amount' => 'required|numeric|min:0',
-               'category' => 'required|in:transportation,accommodation,meals,communication,entertainment,supplies,other', // ✅ UPDATE INI
+            'category' => 'required|string|max:100', // ✅ FIXED: Accept any string (including custom categories)
             'merchant_name' => 'nullable|string|max:100',
             'description' => 'required|string|max:255',
             'file' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120', // Max 5MB
@@ -101,7 +104,7 @@ class ReceiptController extends Controller
             'receipt_number' => $receiptNumber,
             'receipt_date' => $request->receipt_date,
             'amount' => $request->amount,
-            'category' => $request->category,
+            'category' => $request->category, // ✅ Now accepts custom category
             'merchant_name' => $request->merchant_name,
             'description' => $request->description,
             'file_path' => $filePath,
@@ -119,6 +122,7 @@ class ReceiptController extends Controller
             'data' => $receipt
         ], 201);
     }
+
 
     /**
      * Get receipt detail
@@ -140,7 +144,7 @@ class ReceiptController extends Controller
     /**
      * Update receipt
      */
-    public function update(Request $request, $id)
+   public function update(Request $request, $id)
     {
         $receipt = Receipt::findOrFail($id);
 
@@ -165,7 +169,7 @@ class ReceiptController extends Controller
         $validator = Validator::make($request->all(), [
             'receipt_date' => 'sometimes|date',
             'amount' => 'sometimes|numeric|min:0',
-            'category' => 'sometimes|in:fuel,meal,accommodation,transportation,parking,toll,other',
+            'category' => 'sometimes|string|max:100', // ✅ FIXED: Accept any string
             'merchant_name' => 'nullable|string|max:100',
             'description' => 'sometimes|string|max:255',
             'file' => 'sometimes|file|mimes:jpg,jpeg,png,pdf|max:5120',
@@ -214,7 +218,6 @@ class ReceiptController extends Controller
             'data' => $receipt
         ]);
     }
-
     /**
      * Delete receipt
      */

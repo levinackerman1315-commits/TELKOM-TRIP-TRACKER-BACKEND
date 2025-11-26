@@ -9,6 +9,7 @@ use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\SettingsController; // ✅ NEW IMPORT
 
 /*
 |--------------------------------------------------------------------------
@@ -179,6 +180,20 @@ Route::middleware('auth:api')->group(function () {
         // Reactivate user
         Route::post('/{id}/activate', [UserController::class, 'activate']);
     });
+
+    // --------------------------------------------
+    // ✅ NEW: SETTINGS ROUTES (Finance Area)
+    // --------------------------------------------
+    Route::prefix('settings')->group(function () {
+        // Get all settings (Finance Area & Regional only)
+        Route::get('/', [SettingsController::class, 'index']);
+        
+        // Get price per km (ALL authenticated users can access - for NewTrip calculation)
+        Route::get('/price-per-km', [SettingsController::class, 'getPricePerKm']);
+        
+        // Update price per km (Finance Area only)
+        Route::put('/price-per-km', [SettingsController::class, 'updatePricePerKm']);
+    });
 });
 
 // ========================================
@@ -214,6 +229,10 @@ Route::fallback(function () {
             'PUT /api/users/{id}' => 'Update user (HR)',
             'DELETE /api/users/{id}' => 'Delete user (HR)',
             'POST /api/users/{id}/activate' => 'Toggle user status (HR)',
+            // ✅ NEW: Settings endpoints
+            'GET /api/settings' => '🆕 Get all settings (Finance)',
+            'GET /api/settings/price-per-km' => '🆕 Get price per km (All users)',
+            'PUT /api/settings/price-per-km' => '🆕 Update price per km (Finance Area)',
         ]
     ], 404);
 });

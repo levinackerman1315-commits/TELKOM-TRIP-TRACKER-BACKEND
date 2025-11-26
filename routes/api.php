@@ -79,31 +79,34 @@ Route::middleware('auth:api')->group(function () {
     // --------------------------------------------
     // TRIP ROUTES
     // --------------------------------------------
-    Route::prefix('trips')->group(function () {
-        // ✅ Statistics MUST BE FIRST (before /{id})
-        Route::get('statistics', [TripController::class, 'statistics']);
-        
-        // CRUD operations
-        Route::get('/', [TripController::class, 'index']);
-        Route::post('/', [TripController::class, 'store']);
-        Route::get('/{id}', [TripController::class, 'show']);
-        Route::put('/{id}', [TripController::class, 'update']);
-        Route::delete('/{id}', [TripController::class, 'destroy']);
+    // ✅ CORRECT ROUTE ORDER IN: routes/api.php
 
-        // ✅ Get advances by trip (MUST BE BEFORE /{id}/...)
-        Route::get('/{id}/advances', [AdvanceController::class, 'getByTrip']);
+Route::prefix('trips')->group(function () {
+    // ✅ SPECIFIC ROUTES FIRST (before /{id})
+    Route::get('statistics', [TripController::class, 'statistics']);
+    Route::get('ongoing', [TripController::class, 'getOngoing']); // ✅ MOVED HERE!
+    
+    // ✅ CRUD operations (generic routes)
+    Route::get('/', [TripController::class, 'index']);
+    Route::post('/', [TripController::class, 'store']);
+    Route::get('/{id}', [TripController::class, 'show']); // ✅ NOW AFTER specific routes
+    Route::put('/{id}', [TripController::class, 'update']);
+    Route::delete('/{id}', [TripController::class, 'destroy']);
 
-        // Trip actions
-        Route::post('/{id}/submit', [TripController::class, 'submitForReview']);
-        Route::post('/{id}/cancel', [TripController::class, 'cancel']);
-        Route::post('/{id}/extension', [TripController::class, 'requestExtension']);
-        Route::post('/{id}/cancel-extension', [TripController::class, 'cancelExtension']);
+    // ✅ Get advances by trip (MUST BE BEFORE other /{id}/... routes)
+    Route::get('/{id}/advances', [AdvanceController::class, 'getByTrip']);
 
-        // ✅ FIXED: Settlement routes - Ganti method name!
-        Route::post('/{id}/approve-settlement', [TripController::class, 'approveByArea']);
-        Route::post('/{id}/reject-settlement', [TripController::class, 'rejectSettlement']);
-        Route::post('/{id}/approve-settlement-regional', [TripController::class, 'approveSettlementRegional']);
-    });
+    // Trip actions
+    Route::post('/{id}/submit', [TripController::class, 'submitForReview']);
+    Route::post('/{id}/cancel', [TripController::class, 'cancel']);
+    Route::post('/{id}/extension', [TripController::class, 'requestExtension']);
+    Route::post('/{id}/cancel-extension', [TripController::class, 'cancelExtension']);
+
+    // Settlement routes
+    Route::post('/{id}/approve-settlement', [TripController::class, 'approveByArea']);
+    Route::post('/{id}/reject-settlement', [TripController::class, 'rejectSettlement']);
+    Route::post('/{id}/approve-settlement-regional', [TripController::class, 'approveSettlementRegional']);
+});
     
     // --------------------------------------------
     // ADVANCE ROUTES

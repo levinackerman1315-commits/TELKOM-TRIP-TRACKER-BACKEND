@@ -635,6 +635,80 @@ class TripController extends Controller
     }
 
     /**
+ * Get ongoing trips (for Finance Area dashboard)
+ * GET /api/trips/ongoing
+ */
+public function getOngoing(Request $request)
+{
+    // Only Finance Area & Regional can access
+    if (!in_array($request->user()->role, ['finance_area', 'finance_regional'])) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized'
+        ], 403);
+    }
+
+    try {
+        $trips = Trip::with(['user', 'advances', 'receipts'])
+            ->where('status', 'active')
+            ->orderBy('start_date', 'asc')
+            ->get()
+            ->map(function ($trip) {
+                // Calculate totals
+                $approvedAdvances = $trip->advances
+                    ->whereIn('status', ['approved_area', 'approved_regional', 'completed'])
+                    ->sum('approved_amount');
+                
+                $totalExpenses = $trip->receipts->sum('amount');
+                $balance = $approvedAdvances - $totalExpenses;
+                
+                $hasPendingAdvance = $trip->advances
+                    ->where('status', 'pending')
+                    ->count() > 0;
+
+                return [
+                    'trip_id' => $trip->trip_id,
+                    'trip_number' => $trip->trip_number,
+                    'employee_name' => $trip->user->name,
+                    'employee_nik' => $trip->user->nik,
+                    'destination' => $trip->destination,
+                    'start_date' => $trip->start_date,
+                    'end_date' => $trip->extended_end_date ?? $trip->end_date,
+                    'duration' => $trip->duration,
+                    'estimated_budget' => $trip->estimated_budget,
+                    
+                    // Financial summary
+                    'total_advance_approved' => $approvedAdvances,
+                    'total_expenses' => $totalExpenses,
+                    'balance' => $balance,
+                    
+                    // File counts
+                    'receipt_count' => $trip->receipts->count(),
+                    'supporting_doc_count' => $trip->advances
+                        ->whereNotNull('supporting_document')
+                        ->count(),
+                    
+                    // Status flags
+                    'has_pending_advance' => $hasPendingAdvance,
+                    'status' => $trip->status,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $trips
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Failed to get ongoing trips: ' . $e->getMessage());
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to get ongoing trips'
+        ], 500);
+    }
+}
+
+    /**
      * Cancel trip
      * ✅ ADD NOTIFICATION!
      */
